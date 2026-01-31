@@ -1,52 +1,66 @@
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
+import { useEffect } from 'react'
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 
-export interface Server {
-  ip: string;
-  ok: boolean;
-  models: string;
-  latency_ms: number;
-  error?: string;
-  checked_at: string;
-  lat?: number;
-  lon?: number;
+type Item = {
+  ip: string
+  ok: boolean
+  error?: string
+  lat: number
+  lon: number
 }
 
-// Create a new icon instance with correct URLs
-const defaultIcon = new L.Icon.Default({
-  iconRetinaUrl:
-    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.3/images/marker-icon-2x.png',
-  iconUrl:
-    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.3/images/marker-icon.png',
-  shadowUrl:
-    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.3/images/marker-shadow.png',
-});
+function FitBounds({ items }: { items: Item[] }) {
+  const map = useMap()
 
-// Then set globally for all markers
-L.Marker.prototype.options.icon = defaultIcon;
-interface Props {
-  servers: Server[];
+  useEffect(() => {
+    if (!items.length) return
+
+    const bounds = L.latLngBounds(
+      items.map((i) => [i.lat, i.lon])
+    )
+
+    map.fitBounds(bounds, {
+      padding: [60, 60],
+      maxZoom: 6,
+    })
+  }, [items, map])
+
+  return null
 }
 
-export const ServerMap: React.FC<Props> = ({ servers }) => {
+export default function ServerMap({ items }: { items: Item[] }) {
   return (
-    <MapContainer center={[20, 0]} zoom={2} style={{ height: '80vh', width: '100%' }}>
-      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      {servers.map(
-        (s, idx) =>
-          s.lat &&
-          s.lon && (
-            <Marker key={idx} position={[s.lat, s.lon]}>
-              <Popup>
-                <strong>IP:</strong> {s.ip} <br />
-                <strong>Models:</strong> {s.models} <br />
-                <strong>Latency:</strong> {s.latency_ms} ms <br />
-                <strong>Status:</strong> {s.ok ? 'OK' : 'Error'}
-              </Popup>
-            </Marker>
-          )
-      )}
+    <MapContainer
+      className="map-container"
+      center={[0, 0]}        // temporary, overridden by fitBounds
+      zoom={2}
+      minZoom={2}
+      maxBounds={[[-90, -180], [90, 180]]}
+      maxBoundsViscosity={1}
+      style={{ height: '100%', width: '80%' }}
+    >
+      <TileLayer
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution="&copy; OpenStreetMap contributors"
+      />
+
+      <FitBounds items={items} />
+
+      {items.map((item, idx) => (
+        <Marker key={idx} position={[item.lat, item.lon]}>
+          <Popup>
+            <strong>IP:</strong> {item.ip} <br />
+            <strong>Status:</strong> {item.ok ? 'OK' : 'Fail'} <br />
+            {item.error && (
+              <>
+                <strong>Error:</strong> {item.error}
+              </>
+            )}
+          </Popup>
+        </Marker>
+      ))}
     </MapContainer>
-  );
-};
+  )
+}
