@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import ServerMap from './components/ServerMap'
 import './App.css'
+import Navbar from'./Navbar'
 
 const API_BASE =
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
@@ -46,12 +47,14 @@ function App() {
   return (
     <main className="app">
       <header>
+        <Navbar></Navbar>
         <h1>DARN Viewer</h1>
         {loading && <p>Loading…</p>}
         {error && <p className="error">Error: {error}</p>}
       </header>
 
       {!loading && !error && <ServerMap items={data} />}
+      
     </main>
   )
 }
