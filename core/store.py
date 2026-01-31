@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import csv
+import json
 import os
 import sqlite3
-from typing import Iterable
+from typing import Iterable, List, Sequence
 
 
 DEFAULT_DB_PATH = "darn.sqlite3"
@@ -29,13 +31,26 @@ def _ensure_parent_dir(db_path: str) -> None:
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
-	"""Create the endpoints table if needed."""
+	"""Create required tables if needed."""
 
 	conn.execute(
 		"""
 		CREATE TABLE IF NOT EXISTS endpoints (
 			ip TEXT PRIMARY KEY,
 			discovered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)
+		"""
+	)
+	conn.execute(
+		"""
+		CREATE TABLE IF NOT EXISTS verifications (
+			ip TEXT PRIMARY KEY,
+			ok INTEGER NOT NULL,
+			models TEXT,
+			latency_ms INTEGER,
+			error TEXT,
+			checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY(ip) REFERENCES endpoints(ip) ON DELETE CASCADE
 		)
 		"""
 	)
@@ -81,3 +96,137 @@ def get_endpoint_count(path: str | None = None) -> int:
 		return int(row[0]) if row else 0
 	finally:
 		conn.close()
+
+
+def get_endpoints(path: str | None = None) -> List[str]:
+	"""Return all stored endpoint IPs."""
+
+	db_path = _db_path(path)
+	_ensure_parent_dir(db_path)
+
+	conn = sqlite3.connect(db_path)
+	try:
+		_ensure_schema(conn)
+		cur = conn.execute("SELECT ip FROM endpoints ORDER BY discovered_at ASC")
+		return [row[0] for row in cur.fetchall() if row and row[0]]
+	finally:
+		conn.close()
+
+
+def store_verifications(results: Sequence[dict], path: str | None = None) -> int:
+	"""Persist verification results; returns rows inserted/updated."""
+
+	if not results:
+		return 0
+
+	db_path = _db_path(path)
+	_ensure_parent_dir(db_path)
+
+	conn = sqlite3.connect(db_path)
+	try:
+		_ensure_schema(conn)
+		before = conn.total_changes
+		payloads = []
+		for item in results:
+			ip = item.get("ip") if isinstance(item, dict) else None
+			if not ip:
+				continue
+			ok_val = 1 if item.get("ok") else 0
+			models = item.get("models") if isinstance(item, dict) else []
+			models_json = json.dumps(models) if models is not None else None
+			latency = item.get("latency_ms") if isinstance(item, dict) else None
+			error = item.get("error") if isinstance(item, dict) else None
+			payloads.append((ip, ok_val, models_json, latency, error))
+
+			# Ensure endpoint exists to satisfy FK; insert ignore
+		conn.executemany(
+			"INSERT OR IGNORE INTO endpoints (ip) VALUES (?)",
+			[(p[0],) for p in payloads],
+		)
+
+		conn.executemany(
+			"""
+			INSERT INTO verifications (ip, ok, models, latency_ms, error)
+			VALUES (?, ?, ?, ?, ?)
+			ON CONFLICT(ip) DO UPDATE SET
+				ok=excluded.ok,
+				models=excluded.models,
+				latency_ms=excluded.latency_ms,
+				error=excluded.error,
+				checked_at=CURRENT_TIMESTAMP
+			""",
+			payloads,
+		)
+		conn.commit()
+		return conn.total_changes - before
+	finally:
+		conn.close()
+
+
+def fetch_verifications(path: str | None = None) -> List[dict]:
+	"""Return all verification records as dicts (models parsed from JSON)."""
+
+	db_path = _db_path(path)
+	_ensure_parent_dir(db_path)
+
+	conn = sqlite3.connect(db_path)
+	try:
+		_ensure_schema(conn)
+		cur = conn.execute(
+			"""
+			SELECT ip, ok, models, latency_ms, error, checked_at
+			FROM verifications
+			ORDER BY checked_at DESC
+			"""
+		)
+		rows = cur.fetchall()
+	finally:
+		conn.close()
+
+	results: List[dict] = []
+	for ip, ok, models_json, latency, error, checked_at in rows:
+		models_list = []
+		if models_json:
+			try:
+				models_list = json.loads(models_json)
+			except json.JSONDecodeError:
+				models_list = []
+		results.append(
+			{
+				"ip": ip,
+				"ok": bool(ok),
+				"models": models_list,
+				"latency_ms": latency,
+				"error": error,
+				"checked_at": checked_at,
+			}
+		)
+
+	return results
+
+
+def dump_verifications_csv(
+	file_path: str = "verifications.csv", path: str | None = None
+) -> str:
+	"""Write all verification records to a CSV file. Returns the CSV path."""
+
+	records = fetch_verifications(path)
+	if not records:
+		return os.path.abspath(file_path)
+
+	file_path = os.path.abspath(file_path)
+	parent = os.path.dirname(file_path)
+	if parent and not os.path.exists(parent):
+		os.makedirs(parent, exist_ok=True)
+
+	fieldnames = ["ip", "ok", "models", "latency_ms", "error", "checked_at"]
+	with open(file_path, "w", newline="", encoding="utf-8") as f:
+		writer = csv.DictWriter(f, fieldnames=fieldnames)
+		writer.writeheader()
+		for rec in records:
+			row = dict(rec)
+			# Store models as comma-separated string for readability
+			row["models"] = ",".join(rec.get("models", []) or [])
+			writer.writerow(row)
+
+	return file_path

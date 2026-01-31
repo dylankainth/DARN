@@ -1,0 +1,21 @@
+ip,ok,models,latency_ms,error,checked_at
+94.124.160.22,True,gemma3:4b,1325,,2026-01-31 20:47:23
+103.192.43.175,True,"gpt-oss:latest,phi3:mini-128k",492,,2026-01-31 20:47:23
+3.28.130.119,False,,,"HTTPConnectionPool(host='3.28.130.119', port=11434): Max retries exceeded with url: /api/tags (Caused by ConnectTimeoutError(<urllib3.connection.HTTPConnection object at 0x00000223D56BA030>, 'Connection to 3.28.130.119 timed out. (connect timeout=1.5)'))",2026-01-31 20:47:23
+3.35.13.17,True,codellama:13b,572,,2026-01-31 20:47:23
+13.38.47.87,True,"llama2:latest,codellama:13b,llama3:latest",49,,2026-01-31 20:47:23
+54.94.57.178,True,"qwen2.5:1.5b,deepseek-r1:latest",469,,2026-01-31 20:47:23
+51.112.42.200,True,"llama3:latest,llama2:latest,qwen2.5:1.5b,deepseek-r1:latest,openchat:7b",255,,2026-01-31 20:47:23
+108.136.125.203,True,"llama3:latest,openchat:7b",611,,2026-01-31 20:47:23
+18.231.226.82,True,"deepseek-r1:latest,llama2:latest,llama3:latest,openchat:7b",621,,2026-01-31 20:47:23
+47.129.253.154,True,"llama2:latest,openchat:7b",604,,2026-01-31 20:47:23
+54.176.139.45,True,llama3:latest,455,,2026-01-31 20:47:23
+43.198.103.166,True,"codellama:13b,openchat:7b,qwen2.5:1.5b",669,,2026-01-31 20:47:23
+172.96.137.217,True,gemma3:4b,462,,2026-01-31 20:47:23
+103.192.42.80,True,"gpt-oss:latest,phi3:mini-128k",457,,2026-01-31 20:47:23
+35.92.118.192,True,"llama2:latest,qwen2.5:1.5b",408,,2026-01-31 20:47:23
+54.252.210.16,False,,,"HTTPConnectionPool(host='54.252.210.16', port=11434): Max retries exceeded with url: /api/tags (Caused by ConnectTimeoutError(<urllib3.connection.HTTPConnection object at 0x00000223D56BAF90>, 'Connection to 54.252.210.16 timed out. (connect timeout=1.5)'))",2026-01-31 20:47:23
+185.93.221.223,True,gemma3:4b,133,,2026-01-31 20:47:23
+52.63.170.88,True,"llama2:latest,llama3:latest,qwen2.5:1.5b",622,,2026-01-31 20:47:23
+16.50.117.61,True,deepseek-r1:latest,570,,2026-01-31 20:47:23
+45.33.139.19,False,,,"HTTPConnectionPool(host='45.33.139.19', port=11434): Max retries exceeded with url: /api/tags (Caused by ConnectTimeoutError(<urllib3.connection.HTTPConnection object at 0x00000223D56BB740>, 'Connection to 45.33.139.19 timed out. (connect timeout=1.5)'))",2026-01-31 20:47:23
