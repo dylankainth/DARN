@@ -1,0 +1,1 @@
+# check if a given IP is ollama or not
