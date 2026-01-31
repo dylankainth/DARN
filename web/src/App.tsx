@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import './App.css'
+import Navbar from'./Navbar'
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8000'
 const API_VERIFICATIONS = `${API_BASE.replace(/\/+$/, '')}/verifications`
@@ -31,6 +32,7 @@ function App() {
 
   return (
     <main className="app">
+      <Navbar></Navbar>
       <h1>DARN Viewer</h1>
       <p>Fetching from {API_VERIFICATIONS}</p>
       {loading && <p>Loading...</p>}
