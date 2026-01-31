@@ -1,25 +1,68 @@
-"""Minimal CLI to run discovery, then persist results to SQLite."""
+"""Expose stored discovery and verification data via FastAPI."""
 
 from __future__ import annotations
 
 import sys
 
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+
 from core.discovery import DiscoveryError, discover_candidates
 from core.store import (
+    dump_verifications_csv,
+    fetch_verifications,
     get_endpoint_count,
     get_endpoints,
     store_endpoints,
     store_verifications,
-    dump_verifications_csv,
 )
 from core.verify import verify_endpoint
 from dotenv import load_dotenv
 
 
-def main() -> int:
-    # Load variables from .env, then rely on discovery to resolve SHODAN key
-    load_dotenv()
+# Load variables from .env so the DB path/env overrides are available to the API.
+load_dotenv()
 
+app = FastAPI(title="DARN API", version="0.1.0")
+
+# Allow local dev frontends (Vite default port 5173) to call the API.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/")
+def read_root() -> dict[str, str]:
+    return {"service": "DARN API", "docs": "/docs"}
+
+
+@app.get("/verifications")
+def list_verifications() -> dict[str, object]:
+    try:
+        records = fetch_verifications()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"count": len(records), "items": records}
+
+
+@app.get("/endpoints")
+def list_endpoints() -> dict[str, object]:
+    try:
+        endpoints = get_endpoints()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"count": len(endpoints), "items": endpoints}
+
+
+def main() -> int:
+    # Keep the original CLI flow for discovery + verification.
     endpoints: list[str] = []
 
     if get_endpoint_count() > 0:
@@ -64,4 +107,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-	raise SystemExit(main())
+    raise SystemExit(main())
