@@ -42,13 +42,19 @@
   color: #888;
 }
 
+/* The container holding the map */
 .app {
   display: flex;
   flex-direction: column;
-  height: 100vh; /* Force the app to take the full viewport height */
+  align-items: center;    
+  justify-content: center; 
+  height: 100vh;
+  width: 100vw;
 }
 
 .map-container {
-  flex-grow: 1; /* Make the map fill all remaining space below the H1 */
-  width: 100%;
+  width: 80%;  
+  height: 600px; 
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }

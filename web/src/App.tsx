@@ -60,7 +60,7 @@ function App() {
           minZoom={2}               // Prevents zooming out into the void
           maxBounds={[[-90, -180], [90, 180]]} // Keeps the user within the world map
           maxBoundsViscosity={1.0}  // Makes the map bounce back if they try to drag past the edge
-          style={{ height: '100%', width: '100%' }} // Ensure it uses the CSS flex space
+          style={{ height: '100%', width: '80%' }} // Ensure it uses the CSS flex space
         >
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
