@@ -6,6 +6,7 @@ interface VerificationTableProps {
 
 const VerificationTable = ({ data }: VerificationTableProps) => {
   return (
+    <div className="table-wrapper">
     <table className="verification-table">
       <thead>
         <tr>
@@ -30,6 +31,7 @@ const VerificationTable = ({ data }: VerificationTableProps) => {
         ))}
       </tbody>
     </table>
+    </div>
   );
 };
 
