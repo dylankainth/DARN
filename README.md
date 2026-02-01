@@ -1,6 +1,7 @@
 # Distributed AI Ranked Network
 
 ![DARN](https://i.ibb.co/27r9V5M3/image.png)
+
 [Video DEMO!](https://youtu.be/kQSakF5FVXM)
 
 ## Prereqs
