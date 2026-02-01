@@ -20,39 +20,41 @@ interface VerificationData {
 }
 
 function App() {
-  const [data, setData] = useState<VerificationData | null>(null)
+  const [data, setData] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)  // Start as false
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const resp = await fetch(API_VERIFICATIONS)
-        if (!resp.ok) {
-          throw new Error(`Request failed with status ${resp.status}`)
-        }
-        const json = await resp.json()
-        setData(json)
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Unknown error'
-        setError(message)
-      } finally {
-        setLoading(false)
+  // Remove the useEffect, create a function instead:
+  const fetchData = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const resp = await fetch(API_VERIFICATIONS)
+      if (!resp.ok) {
+        throw new Error(`Request failed with status ${resp.status}`)
       }
+      const json = await resp.json()
+      setData(json)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      setError(message)
+    } finally {
+      setLoading(false)
     }
-
-    fetchData()
-  }, [])
+  }
 
   return (
     <main className="app">
-      <Navbar></Navbar>
+      <Navbar />
       <h1>DARN Viewer</h1>
-      <p>Fetching from {API_VERIFICATIONS}</p>
+      
+      <button onClick={fetchData}>Run</button>
+      
       {loading && <p>Loading...</p>}
       {error && <p className="error">Error: {error}</p>}
       {!loading && !error && data && data.items && (
-      <VerificationTable data={data} />
+        <VerificationTable data={data} />
       )}
     </main>
   )
