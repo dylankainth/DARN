@@ -12,9 +12,6 @@ const Navbar = () => {
   </div>
   <div className="navbar-center">
     <ul className="nav-links">
-      <li>
-        <a href="/tbc">tbc</a>
-      </li>
     </ul>
   </div>
 </nav>

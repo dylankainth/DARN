@@ -6,6 +6,7 @@ interface VerificationTableProps {
 
 const VerificationTable = ({ data }: VerificationTableProps) => {
   return (
+    <div className="table-wrapper">
     <table className="verification-table">
       <thead>
         <tr>
@@ -20,16 +21,17 @@ const VerificationTable = ({ data }: VerificationTableProps) => {
       <tbody>
         {data.items.map((row: any, index: number) => (
           <tr key={index}>
-            <td>{row.ip}</td>
+            <td title={row.ip}>{row.ip}</td>
             <td>{row.ok ? '✓' : '✗'}</td>
-            <td>{row.models.join(', ')}</td>
+            <td title={row.models.join(', ')}>{row.models.join(', ')}</td>
             <td>{row.latency_ms || '-'}</td>
-            <td>{row.error || '-'}</td>
-            <td>{row.checked_at}</td>
+            <td title={row.error || ''}>{row.error || '-'}</td>
+            <td title={row.checked_at}>{row.checked_at}</td>
           </tr>
         ))}
       </tbody>
     </table>
+    </div>
   );
 };
 
