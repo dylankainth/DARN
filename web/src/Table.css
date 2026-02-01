@@ -1,0 +1,102 @@
+.table-wrapper {
+  max-height: 400px; 
+  overflow-y: auto;
+  overflow-x: auto;
+  margin: 20px auto;
+  max-width: 900px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  background-color: white;
+}
+
+/* Smooth scrollbar */
+.table-wrapper::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.table-wrapper::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+.table-wrapper::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 10px;
+}
+
+.table-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+.verification-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  margin: 0;
+}
+
+.verification-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.verification-table th {
+  background-color: #000435;
+  color: white;
+  padding: 14px 16px;
+  text-align: left;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  font-size: 12px;
+}
+
+.verification-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #e8e8e8;
+  color: #333;
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  position: relative;
+}
+
+/* Tooltip on hover for long text */
+.verification-table td[title]:hover::after {
+  content: attr(title);
+  position: fixed;
+  left: 50%;
+  bottom: 40px;
+  transform: translateX(-50%);
+  background-color: #333;
+  color: white;
+  padding: 10px 16px;
+  border-radius: 6px;
+  white-space: normal;
+  max-width: 500px;
+  z-index: 9999;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  font-size: 13px;
+  word-wrap: break-word;
+  line-height: 1.4;
+}
+
+.verification-table tbody tr {
+  transition: all 0.2s ease;
+}
+
+.verification-table tbody tr:hover {
+  background-color: #f8f9fa;
+}
+
+.verification-table tbody tr:nth-child(even) {
+  background-color: #fafbfc;
+}
+
+.verification-table td:nth-child(2) {
+  font-weight: bold;
+  font-size: 16px;
+}
