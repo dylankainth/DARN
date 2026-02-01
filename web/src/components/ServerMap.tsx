@@ -39,7 +39,7 @@ export default function ServerMap({ items }: { items: Item[] }) {
       minZoom={2}
       maxBounds={[[-90, -180], [90, 180]]}
       maxBoundsViscosity={1}
-      style={{ height: '100%', width: '80%' }}
+      style={{ height: '100%', width: '100%' }}
     >
       <TileLayer
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
