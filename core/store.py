@@ -49,11 +49,36 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
 			models TEXT,
 			latency_ms INTEGER,
 			error TEXT,
+			lat REAL,
+			lon REAL,
+			city TEXT,
+			region TEXT,
+			country TEXT,
 			checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY(ip) REFERENCES endpoints(ip) ON DELETE CASCADE
 		)
 		"""
 	)
+	
+	# Migrate existing tables to add location columns if missing
+	try:
+		cur = conn.execute("PRAGMA table_info(verifications)")
+		columns = {row[1] for row in cur.fetchall()}
+		if 'lat' not in columns:
+			conn.execute("ALTER TABLE verifications ADD COLUMN lat REAL")
+		if 'lon' not in columns:
+			conn.execute("ALTER TABLE verifications ADD COLUMN lon REAL")
+		if 'city' not in columns:
+			conn.execute("ALTER TABLE verifications ADD COLUMN city TEXT")
+		if 'region' not in columns:
+			conn.execute("ALTER TABLE verifications ADD COLUMN region TEXT")
+		if 'country' not in columns:
+			conn.execute("ALTER TABLE verifications ADD COLUMN country TEXT")
+		conn.commit()
+	except Exception:
+		# If migration fails, continue - table might not exist yet
+		pass
+	
 	conn.execute(
 		"""
 		CREATE TABLE IF NOT EXISTS probes (
@@ -152,7 +177,12 @@ def store_verifications(results: Sequence[dict], path: str | None = None) -> int
 			models_json = json.dumps(models) if models is not None else None
 			latency = item.get("latency_ms") if isinstance(item, dict) else None
 			error = item.get("error") if isinstance(item, dict) else None
-			payloads.append((ip, ok_val, models_json, latency, error))
+			lat = item.get("lat") if isinstance(item, dict) else None
+			lon = item.get("lon") if isinstance(item, dict) else None
+			city = item.get("city") if isinstance(item, dict) else None
+			region = item.get("region") if isinstance(item, dict) else None
+			country = item.get("country") if isinstance(item, dict) else None
+			payloads.append((ip, ok_val, models_json, latency, error, lat, lon, city, region, country))
 
 			# Ensure endpoint exists to satisfy FK; insert ignore
 		conn.executemany(
@@ -162,13 +192,18 @@ def store_verifications(results: Sequence[dict], path: str | None = None) -> int
 
 		conn.executemany(
 			"""
-			INSERT INTO verifications (ip, ok, models, latency_ms, error)
-			VALUES (?, ?, ?, ?, ?)
+			INSERT INTO verifications (ip, ok, models, latency_ms, error, lat, lon, city, region, country)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(ip) DO UPDATE SET
 				ok=excluded.ok,
 				models=excluded.models,
 				latency_ms=excluded.latency_ms,
 				error=excluded.error,
+				lat=COALESCE(excluded.lat, lat),
+				lon=COALESCE(excluded.lon, lon),
+				city=COALESCE(excluded.city, city),
+				region=COALESCE(excluded.region, region),
+				country=COALESCE(excluded.country, country),
 				checked_at=CURRENT_TIMESTAMP
 			""",
 			payloads,
@@ -190,7 +225,7 @@ def fetch_verifications(path: str | None = None) -> List[dict]:
 		_ensure_schema(conn)
 		cur = conn.execute(
 			"""
-			SELECT ip, ok, models, latency_ms, error, checked_at
+			SELECT ip, ok, models, latency_ms, error, lat, lon, city, region, country, checked_at
 			FROM verifications
 			ORDER BY checked_at DESC
 			"""
@@ -200,23 +235,31 @@ def fetch_verifications(path: str | None = None) -> List[dict]:
 		conn.close()
 
 	results: List[dict] = []
-	for ip, ok, models_json, latency, error, checked_at in rows:
+	for ip, ok, models_json, latency, error, lat, lon, city, region, country, checked_at in rows:
 		models_list = []
 		if models_json:
 			try:
 				models_list = json.loads(models_json)
 			except json.JSONDecodeError:
 				models_list = []
-		results.append(
-			{
-				"ip": ip,
-				"ok": bool(ok),
-				"models": models_list,
-				"latency_ms": latency,
-				"error": error,
-				"checked_at": checked_at,
-			}
-		)
+		result = {
+			"ip": ip,
+			"ok": bool(ok),
+			"models": models_list,
+			"latency_ms": latency,
+			"error": error,
+			"checked_at": checked_at,
+		}
+		if lat is not None and lon is not None:
+			result["lat"] = lat
+			result["lon"] = lon
+		if city:
+			result["city"] = city
+		if region:
+			result["region"] = region
+		if country:
+			result["country"] = country
+		results.append(result)
 
 	return results
 

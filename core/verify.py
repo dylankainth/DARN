@@ -7,6 +7,8 @@ from typing import Dict, List, Optional
 
 import requests
 
+from .geoip import geolocate_ip
+
 DEFAULT_PORT = 11434
 DEFAULT_TIMEOUT = 1.5  # seconds, for /api/tags metadata
 INFERENCE_TIMEOUT = 40.0  # seconds, for actual model inference
@@ -157,4 +159,11 @@ def verify_endpoint(
 			"error": "inference_gibberish",
 		}
 
-	return {"ip": ip, "ok": True, "models": models, "latency_ms": latency_ms}
+	result = {"ip": ip, "ok": True, "models": models, "latency_ms": latency_ms}
+	
+	# Add geolocation data
+	geo = geolocate_ip(ip)
+	if geo:
+		result.update(geo)
+	
+	return result

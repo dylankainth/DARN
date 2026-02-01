@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import Navbar from './Navbar'
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8000'
@@ -9,6 +10,7 @@ type ChatMessage = { role: 'user' | 'assistant'; content: string }
 type Choice = { ip: string; models: string[]; score?: number; latency_ms?: number }
 
 function Chat() {
+    const [searchParams] = useSearchParams()
     const [messages, setMessages] = useState<ChatMessage[]>([
         { role: 'assistant', content: 'Hi! I am your DARN chat helper. Pick a host/model, then ask away.' },
     ])
@@ -31,7 +33,19 @@ function Chat() {
                 const json = await resp.json()
                 const items: Choice[] = json.items || []
                 setChoices(items)
-                if (items.length) {
+
+                // Check if IP is provided in URL params
+                const ipParam = searchParams.get('ip')
+                if (ipParam && items.length) {
+                    const matchedChoice = items.find(c => c.ip === ipParam)
+                    if (matchedChoice) {
+                        setSelectedIp(matchedChoice.ip)
+                        setSelectedModel(matchedChoice.models?.[0] ?? '')
+                    } else if (items.length) {
+                        setSelectedIp(items[0].ip)
+                        setSelectedModel(items[0].models?.[0] ?? '')
+                    }
+                } else if (items.length) {
                     setSelectedIp(items[0].ip)
                     setSelectedModel(items[0].models?.[0] ?? '')
                 }
@@ -40,7 +54,7 @@ function Chat() {
             }
         }
         loadChoices()
-    }, [])
+    }, [searchParams])
 
     const scrollToBottom = () => {
         const el = listRef.current
@@ -145,8 +159,8 @@ function Chat() {
                             <div key={idx} className={`flex ${m.role === 'assistant' ? 'justify-start' : 'justify-end'}`}>
                                 <div
                                     className={`max-w-[80%] rounded-2xl border px-4 py-3 text-sm leading-relaxed shadow-lg ${m.role === 'assistant'
-                                            ? 'border-[#1f2128] bg-[#15171d] text-zinc-100'
-                                            : 'border-emerald-300/60 bg-emerald-500/90 text-white'
+                                        ? 'border-[#1f2128] bg-[#15171d] text-zinc-100'
+                                        : 'border-emerald-300/60 bg-emerald-500/90 text-white'
                                         }`}
                                 >
                                     {m.content}

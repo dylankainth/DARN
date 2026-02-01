@@ -58,49 +58,13 @@ function App() {
       const json = (await resp.json()) as VerificationPayload
       setData(json)
 
+      // Filter items that have lat/lon from backend
       const items = json.items ?? []
-      const geocodeIp = async (ip: string) => {
-        const tryProviders = [
-          async () => {
-            const r = await fetch(`https://ipapi.co/${ip}/json/`)
-            if (!r.ok) return null
-            const g = await r.json()
-            const lat = typeof g.lat === 'number' ? g.lat : Number(g.latitude)
-            const lon = typeof g.lon === 'number' ? g.lon : Number(g.longitude)
-            return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null
-          },
-          async () => {
-            const r = await fetch(`https://ipwho.is/${ip}`)
-            if (!r.ok) return null
-            const g = await r.json()
-            const lat = Number(g.latitude)
-            const lon = Number(g.longitude)
-            return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null
-          },
-        ]
-        for (const fn of tryProviders) {
-          try {
-            const res = await fn()
-            if (res) return res
-          } catch (_) {
-            // ignore and try next
-          }
-        }
-        return null
-      }
+      const itemsWithLocation = items.filter(
+        (item) => typeof item.lat === 'number' && typeof item.lon === 'number'
+      ) as Array<VerificationRow & { lat: number; lon: number }>
 
-      const enriched = await Promise.all(
-        items.map(async (item) => {
-          if (typeof item.lat === 'number' && typeof item.lon === 'number') {
-            return item as VerificationRow & { lat: number; lon: number }
-          }
-          const geo = await geocodeIp(item.ip)
-          if (geo) return { ...(item as VerificationRow), ...geo }
-          return null
-        })
-      )
-
-      setMapItems(enriched.filter(Boolean) as Array<VerificationRow & { lat: number; lon: number }>)
+      setMapItems(itemsWithLocation)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       setError(message)

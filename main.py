@@ -13,8 +13,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from core.discovery import DiscoveryError, discover_candidates
 from core.probe import probe_node
 from core.scoring import rank_verifications
+from core.geoip import geolocate_ip
 from core.store import (
-    _db_path,
+_db_path,
     dump_verifications_csv,
     fetch_verifications,
     get_endpoint_count,
@@ -57,6 +58,20 @@ def read_root() -> dict[str, str]:
 def list_verifications() -> dict[str, object]:
     try:
         records = fetch_verifications()
+        
+        # Backfill missing locations
+        needs_update = []
+        for rec in records:
+            if rec.get("lat") is None or rec.get("lon") is None:
+                geo = geolocate_ip(rec["ip"])
+                if geo:
+                    rec.update(geo)
+                    needs_update.append(rec)
+        
+        # Store updated records
+        if needs_update:
+            store_verifications(needs_update)
+            
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"count": len(records), "items": records}
@@ -83,7 +98,7 @@ def get_ip_details(ip: str) -> dict[str, object]:
         
         # Fetch verification
         cur = conn.execute(
-            "SELECT ip, ok, models, latency_ms, error, checked_at FROM verifications WHERE ip = ?",
+            "SELECT ip, ok, models, latency_ms, error, lat, lon, city, region, country, checked_at FROM verifications WHERE ip = ?",
             (ip,)
         )
         verify_row = cur.fetchone()
@@ -106,8 +121,19 @@ def get_ip_details(ip: str) -> dict[str, object]:
             "models": models,
             "latency_ms": verify_row[3],
             "error": verify_row[4],
-            "checked_at": verify_row[5],
+            "checked_at": verify_row[10],
         }
+        
+        # Add location data if available
+        if verify_row[5] is not None and verify_row[6] is not None:
+            verification["lat"] = verify_row[5]
+            verification["lon"] = verify_row[6]
+            if verify_row[7]:
+                verification["city"] = verify_row[7]
+            if verify_row[8]:
+                verification["region"] = verify_row[8]
+            if verify_row[9]:
+                verification["country"] = verify_row[9]
         
         # Fetch probes
         cur = conn.execute(

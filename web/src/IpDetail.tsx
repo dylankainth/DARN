@@ -55,25 +55,16 @@ function IpDetail() {
                 setVerification(verifyData.verification)
                 setProbes(verifyData.probes || [])
 
-                // Fetch location data
-                try {
-                    const geoResp = await fetch(`https://ipapi.co/${ip}/json/`)
-                    if (geoResp.ok) {
-                        const geo = await geoResp.json()
-                        const lat = typeof geo.latitude === 'number' ? geo.latitude : Number(geo.latitude)
-                        const lon = typeof geo.longitude === 'number' ? geo.longitude : Number(geo.longitude)
-                        if (Number.isFinite(lat) && Number.isFinite(lon)) {
-                            setLocation({
-                                lat,
-                                lon,
-                                city: geo.city,
-                                region: geo.region,
-                                country: geo.country_name,
-                            })
-                        }
-                    }
-                } catch {
-                    // Ignore geo errors
+                // Set location from backend data if available
+                const v = verifyData.verification
+                if (v.lat != null && v.lon != null) {
+                    setLocation({
+                        lat: v.lat,
+                        lon: v.lon,
+                        city: v.city,
+                        region: v.region,
+                        country: v.country,
+                    })
                 }
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Unknown error')
@@ -143,17 +134,29 @@ function IpDetail() {
                 </div>
 
                 <header className="mb-6">
-                    <div className="flex items-center gap-3">
-                        <span
-                            className={`h-3 w-3 rounded-full ${verification.ok ? 'bg-emerald-400' : 'bg-rose-400'}`}
-                        />
-                        <h1 className="font-mono text-3xl font-bold">{ip}</h1>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <div className="flex items-center gap-3">
+                                <span
+                                    className={`h-3 w-3 rounded-full ${verification.ok ? 'bg-emerald-400' : 'bg-rose-400'}`}
+                                />
+                                <h1 className="font-mono text-3xl font-bold">{ip}</h1>
+                            </div>
+                            <p className="mt-2 text-sm text-zinc-300">
+                                {location
+                                    ? `${location.city || 'Unknown'}, ${location.region || ''} ${location.country || ''}`
+                                    : 'Location unknown'}
+                            </p>
+                        </div>
+                        {verification.ok && verification.models.length > 0 && (
+                            <Link
+                                to={`/chat?ip=${encodeURIComponent(ip)}`}
+                                className="rounded-xl border border-emerald-400/60 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:border-emerald-300 hover:bg-emerald-500/25"
+                            >
+                                Chat with this host →
+                            </Link>
+                        )}
                     </div>
-                    <p className="mt-2 text-sm text-zinc-300">
-                        {location
-                            ? `${location.city || 'Unknown'}, ${location.region || ''} ${location.country || ''}`
-                            : 'Location unknown'}
-                    </p>
                 </header>
 
                 <div className="space-y-4">
@@ -293,8 +296,8 @@ function IpDetail() {
                                             <div className="flex items-center gap-2">
                                                 <span
                                                     className={`inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold ${probe.success
-                                                            ? 'border-emerald-400/60 bg-emerald-500/15 text-emerald-100'
-                                                            : 'border-rose-400/70 bg-rose-500/15 text-rose-100'
+                                                        ? 'border-emerald-400/60 bg-emerald-500/15 text-emerald-100'
+                                                        : 'border-rose-400/70 bg-rose-500/15 text-rose-100'
                                                         }`}
                                                 >
                                                     {probe.success ? 'OK' : 'FAIL'}
