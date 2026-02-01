@@ -9,6 +9,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+import requests
+from fastapi import HTTPException
 
 from core.discovery import DiscoveryError, discover_candidates
 from core.probe import probe_node
@@ -18,6 +20,7 @@ from core.store import (
 _db_path,
     dump_verifications_csv,
     fetch_verifications,
+    fetch_probes,
     get_endpoint_count,
     get_endpoints,
     store_probes,
@@ -86,6 +89,57 @@ def list_endpoints() -> dict[str, object]:
     return {"count": len(endpoints), "items": endpoints}
 
 
+@app.api_route("/ipapi/{path:path}", methods=["GET", "OPTIONS"])
+def ipapi_proxy(path: str):
+    url = f"https://ipapi.co/{path}"
+    try:
+        r = requests.get(url, timeout=3)
+        r.raise_for_status()  
+        return r.json()   
+    except requests.exceptions.RequestException as exc:
+        return {"error": str(exc), "url": url, "status_code": getattr(r, "status_code", None)}
+    except ValueError as exc:
+        return {"error": "Invalid JSON response", "url": url, "text": r.text[:500]}
+
+@app.get("/ipwho/{path:path}")
+def ipwho_proxy(path: str):
+    url = f"https://ipwho.is/{path}"
+    try:
+        r = requests.get(url, timeout=3)
+        r.raise_for_status()
+        return r.json()
+    except requests.exceptions.RequestException as exc:
+        return {"error": str(exc), "url": url, "status_code": getattr(r, "status_code", None)}
+    except ValueError:
+        return {"error": "Invalid JSON response", "url": url, "text": r.text[:500]}
+
+
+@app.get("/probes")
+def list_probes(limit: int | None = None) -> dict[str, object]:
+    try:
+        records = fetch_probes(limit=limit)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"count": len(records), "items": records}
+
+
+@app.post("/run-probes")
+def run_probes() -> dict[str, object]:
+    """Manually trigger a probe run on all verified endpoints."""
+    try:
+        verifications = fetch_verifications()
+        probe_candidates = [r for r in verifications if r.get("ok") and r.get("models")]
+        
+        if not probe_candidates:
+            return {"message": "No verified endpoints with models available", "probes_run": 0}
+        
+        probe_results = [probe_node(r["ip"], r.get("models", [])) for r in probe_candidates]
+        probe_stored = store_probes(probe_results) if probe_results else 0
+        
+        return {
+            "message": f"Probed {len(probe_results)} endpoint(s)",
+            "probes_run": len(probe_results),
+            "probes_stored": probe_stored,
 @app.get("/ip/{ip}")
 def get_ip_details(ip: str) -> dict[str, object]:
     """Get detailed information about a specific IP including verification and probe history."""
@@ -291,7 +345,6 @@ def refresh_all() -> dict[str, object]:
 
 
 def main() -> int:
-    # Keep the original CLI flow for discovery + verification.
     endpoints: list[str] = []
 
     if get_endpoint_count() > 0:
