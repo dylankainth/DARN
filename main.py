@@ -8,11 +8,14 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.discovery import DiscoveryError, discover_candidates
+from core.probe import probe_node
+from core.scoring import rank_verifications
 from core.store import (
     dump_verifications_csv,
     fetch_verifications,
     get_endpoint_count,
     get_endpoints,
+    store_probes,
     store_endpoints,
     store_verifications,
 )
@@ -103,8 +106,42 @@ def main() -> int:
         print(f"- {res.get('ip')}: {status} (latency_ms={lat}, models={models})")
     print(f"Stored/updated {stored} verification record(s).")
     print(f"Wrote CSV: {csv_path}")
-    return 0
 
+    probe_candidates = [r for r in results if r.get("ok") and r.get("models")]
+    probe_results = [probe_node(r["ip"], r.get("models", [])) for r in probe_candidates]
+    probe_stored = store_probes(probe_results) if probe_results else 0
+
+    if probe_results:
+        print("Probe results:")
+        for res in probe_results:
+            status = "ok" if res.get("success") else "fail"
+            print(
+                "- {} [{}]: latency_ms={}, status_code={}, error={}".format(
+                    res.get("ip"),
+                    res.get("model"),
+                    res.get("latency_ms"),
+                    res.get("status_code"),
+                    res.get("error"),
+                )
+            )
+        print(f"Stored {probe_stored} probe record(s).")
+    else:
+        print("No probe candidates (need verified endpoints with models).")
+
+    ranked = rank_verifications(results)
+    print("Ranked endpoints (best first):")
+    for item in ranked:
+        score_val = item.get("score") or 0.0
+        print(
+            "- {}: score={:.1f}, latency_ms={}, models={}, ok={}".format(
+                item.get("ip"),
+                score_val,
+                item.get("latency_ms"),
+                item.get("models"),
+                item.get("ok"),
+            )
+        )
+    return 0
 
 if __name__ == "__main__":
     raise SystemExit(main())

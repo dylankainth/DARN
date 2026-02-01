@@ -54,6 +54,22 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
 		)
 		"""
 	)
+	conn.execute(
+		"""
+		CREATE TABLE IF NOT EXISTS probes (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			ip TEXT NOT NULL,
+			model TEXT,
+			success INTEGER NOT NULL,
+			latency_ms INTEGER,
+			status_code INTEGER,
+			error TEXT,
+			body TEXT,
+			ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY(ip) REFERENCES endpoints(ip) ON DELETE CASCADE
+		)
+		"""
+	)
 
 
 def store_endpoints(endpoints: Iterable[str], path: str | None = None) -> int:
@@ -230,3 +246,54 @@ def dump_verifications_csv(
 			writer.writerow(row)
 
 	return file_path
+
+
+def store_probes(results: Sequence[dict], path: str | None = None) -> int:
+	"""Persist probe results in the probes table."""
+
+	if not results:
+		return 0
+
+	db_path = _db_path(path)
+	_ensure_parent_dir(db_path)
+
+	conn = sqlite3.connect(db_path)
+	try:
+		_ensure_schema(conn)
+		before = conn.total_changes
+
+		payloads = []
+		for item in results:
+			if not isinstance(item, dict):
+				continue
+			ip = item.get("ip")
+			if not ip:
+				continue
+			model = item.get("model") if isinstance(item.get("model"), str) else None
+			success = 1 if item.get("success") else 0
+			latency = item.get("latency_ms") if isinstance(item.get("latency_ms"), (int, float)) else None
+			status_code = item.get("status_code") if isinstance(item.get("status_code"), int) else None
+			error = item.get("error") if isinstance(item.get("error"), str) else None
+			body = item.get("body") if isinstance(item.get("body"), str) else None
+			payloads.append((ip, model, success, latency, status_code, error, body))
+
+		if not payloads:
+			return 0
+
+		conn.executemany(
+			"INSERT OR IGNORE INTO endpoints (ip) VALUES (?)",
+			[(p[0],) for p in payloads],
+		)
+
+		conn.executemany(
+			"""
+			INSERT INTO probes (
+				ip, model, success, latency_ms, status_code, error, body
+			) VALUES (?, ?, ?, ?, ?, ?, ?)
+			""",
+			payloads,
+		)
+		conn.commit()
+		return conn.total_changes - before
+	finally:
+		conn.close()
