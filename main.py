@@ -72,13 +72,11 @@ def ipapi_proxy(path: str):
     url = f"https://ipapi.co/{path}"
     try:
         r = requests.get(url, timeout=3)
-        r.raise_for_status()  # will raise for HTTP errors
-        return r.json()       # will raise if invalid JSON
+        r.raise_for_status()  
+        return r.json()   
     except requests.exceptions.RequestException as exc:
-        # network errors, 429, 5xx, etc.
         return {"error": str(exc), "url": url, "status_code": getattr(r, "status_code", None)}
     except ValueError as exc:
-        # invalid JSON
         return {"error": "Invalid JSON response", "url": url, "text": r.text[:500]}
 
 @app.get("/ipwho/{path:path}")
