@@ -39,3 +39,27 @@ a {
 .pin-icon {
   filter: brightness(0) invert(1) drop-shadow(0 2px 2px rgba(0, 0, 0, 0.4));
 }
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #0f1014;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #2a2d35;
+  border-radius: 4px;
+  border: 1px solid #1f2128;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #3a3d44;
+}
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #2a2d35 #0f1014;
+}

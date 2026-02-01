@@ -8,7 +8,8 @@ from typing import Dict, List, Optional
 import requests
 
 DEFAULT_PORT = 11434
-DEFAULT_TIMEOUT = 1.5  # seconds, hard cap per instructions
+DEFAULT_TIMEOUT = 1.5  # seconds, for /api/tags metadata
+INFERENCE_TIMEOUT = 40.0  # seconds, for actual model inference
 PATH = "/api/tags"  # choose tags to also learn available models
 
 
@@ -41,6 +42,63 @@ def _extract_models(payload: object) -> List[str]:
 					names.append(name)
 		return names
 	return []
+
+
+PREFERRED_PROBE_MODELS = (
+	"phi",
+	"qwen2.5:0.5b",
+	"qwen2.5:1.5b",
+	"llama3.2:1b",
+)
+
+
+def _pick_probe_model(models: List[str]) -> Optional[str]:
+	"""Pick a tiny/fast model if available, else first model."""
+
+	normalized = [m for m in models if isinstance(m, str) and m]
+	for preferred in PREFERRED_PROBE_MODELS:
+		for m in normalized:
+			if m.startswith(preferred):
+				return m
+	return normalized[0] if normalized else None
+
+
+def _inference_probe(base_url: str, model: str, timeout: float) -> Optional[str]:
+	"""Call /api/chat once and return the assistant message text."""
+
+	url = f"{base_url}/api/chat"
+	payload = {
+		"model": model,
+		"messages": [{"role": "user", "content": "Say hello"}],
+		"stream": False,
+	}
+	try:
+		resp = requests.post(url, json=payload, timeout=timeout)
+		if resp.status_code != 200:
+			return None
+		data = resp.json()
+	except Exception:
+		return None
+
+	message = data.get("message") if isinstance(data, dict) else None
+	content = message.get("content") if isinstance(message, dict) else None
+	return content if isinstance(content, str) else None
+
+
+def _looks_like_language(text: str) -> bool:
+	"""Cheap heuristic: short, mostly alphabetic tokens -> likely real output."""
+
+	if len(text) < 3 or len(text) > 200:
+		return False
+
+	tokens = text.split()
+	alphaish = 0
+	for token in tokens:
+		letters = "".join(ch for ch in token if ch.isalpha())
+		if letters:
+			alphaish += 1
+
+	return alphaish / max(len(tokens), 1) > 0.5
 
 
 def verify_endpoint(
@@ -77,4 +135,26 @@ def verify_endpoint(
 		}
 
 	models = _extract_models(payload)
+	base = _build_url(ip, port=port, path="").rstrip("/")
+	probe_model = _pick_probe_model(models)
+
+	if not probe_model:
+		return {
+			"ip": ip,
+			"ok": False,
+			"models": models,
+			"latency_ms": latency_ms,
+			"error": "no_probe_model",
+		}
+
+	reply = _inference_probe(base, probe_model, INFERENCE_TIMEOUT)
+	if not reply or not _looks_like_language(reply):
+		return {
+			"ip": ip,
+			"ok": False,
+			"models": models,
+			"latency_ms": latency_ms,
+			"error": "inference_gibberish",
+		}
+
 	return {"ip": ip, "ok": True, "models": models, "latency_ms": latency_ms}

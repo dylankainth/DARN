@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
+import { useNavigate } from 'react-router-dom'
 import L from 'leaflet'
 import pinUrl from '../assets/pin.svg'
 import 'leaflet/dist/leaflet.css'
@@ -32,6 +33,8 @@ function FitBounds({ items }: { items: Item[] }) {
 }
 
 export default function ServerMap({ items }: { items: Item[] }) {
+  const navigate = useNavigate()
+
   const icon = L.icon({
     iconUrl: pinUrl,
     iconSize: [30, 40],
@@ -59,15 +62,31 @@ export default function ServerMap({ items }: { items: Item[] }) {
       <FitBounds items={items} />
 
       {items.map((item, idx) => (
-        <Marker key={idx} position={[item.lat, item.lon]} icon={icon}>
+        <Marker
+          key={idx}
+          position={[item.lat, item.lon]}
+          icon={icon}
+          eventHandlers={{
+            click: () => navigate(`/ip/${item.ip}`)
+          }}
+        >
           <Popup>
-            <strong>IP:</strong> {item.ip} <br />
-            <strong>Status:</strong> {item.ok ? 'OK' : 'Fail'} <br />
-            {item.error && (
-              <>
-                <strong>Error:</strong> {item.error}
-              </>
-            )}
+            <div className="text-sm">
+              <div className="mb-1"><strong>IP:</strong> {item.ip}</div>
+              <div className="mb-1"><strong>Status:</strong> {item.ok ? 'OK' : 'Fail'}</div>
+              {item.error && (
+                <div><strong>Error:</strong> {item.error}</div>
+              )}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  navigate(`/ip/${item.ip}`)
+                }}
+                className="mt-2 rounded bg-zinc-700 px-2 py-1 text-xs text-white hover:bg-zinc-600"
+              >
+                View Details
+              </button>
+            </div>
           </Popup>
         </Marker>
       ))}

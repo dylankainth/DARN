@@ -9,7 +9,7 @@ import shodan
 
 
 DEFAULT_QUERY = 'ollama is running'
-DEFAULT_LIMIT = 20
+DEFAULT_LIMIT = 500
 
 
 class DiscoveryError(Exception):
