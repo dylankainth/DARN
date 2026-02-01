@@ -22,9 +22,8 @@ interface VerificationData {
 function App() {
   const [data, setData] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)  // Start as false
+  const [loading, setLoading] = useState(false)  
 
-  // Remove the useEffect, create a function instead:
   const fetchData = async () => {
     setLoading(true);
     setError(null);
@@ -45,8 +44,9 @@ function App() {
   }
 
   return (
+    <>
+    <Navbar />
     <main className="app">
-      <Navbar />
       <h1>DARN Viewer</h1>
       
       <button onClick={fetchData}>Run</button>
@@ -57,6 +57,7 @@ function App() {
         <VerificationTable data={data} />
       )}
     </main>
+    </>
   )
 }
 
