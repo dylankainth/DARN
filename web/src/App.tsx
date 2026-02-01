@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import Navbar from './Navbar'
 import ServerMap from './components/ServerMap'
+import LatencyChart from './components/LatencyChart'
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8000'
 const API_VERIFICATIONS = `${API_BASE.replace(/\/+$/, '')}/verifications`
+const API_RUN_PROBES = `${API_BASE.replace(/\/+$/, '')}/run-probes`
 
 type VerificationRow = {
   ip: string
@@ -30,10 +32,32 @@ const formatTime = (iso: string) => {
   return date.toLocaleString()
 }
 
+const originalFetch = window.fetch.bind(window);
+
+const PROXIES: Record<string, string> = {
+  "https://ipwho.is/": "http://localhost:8000/ipwho/",
+  "https://ipapi.co/": "http://localhost:8000/ipapi/",
+};
+
+window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+  const url = typeof input === "string" ? input : input.toString();
+
+  for (const [target, proxy] of Object.entries(PROXIES)) {
+    if (url.startsWith(target)) {
+      const proxiedUrl = url.replace(target, proxy);
+      return originalFetch(proxiedUrl, init);
+    }
+  }
+
+  return originalFetch(input, init);
+};
+
 function App() {
   const [data, setData] = useState<VerificationPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [probing, setProbing] = useState(false)
+  const [autoProbe, setAutoProbe] = useState(true)
   const [modalRow, setModalRow] = useState<VerificationRow | null>(null)
   const [mapItems, setMapItems] = useState<Array<VerificationRow & { lat: number; lon: number }>>([])
 
@@ -98,9 +122,35 @@ function App() {
     }
   }
 
+  const runProbes = async () => {
+    setProbing(true)
+    try {
+      const resp = await fetch(API_RUN_PROBES, { method: 'POST' })
+      if (!resp.ok) throw new Error(`Probe request failed with status ${resp.status}`)
+      const result = await resp.json()
+      console.log('Probe result:', result)
+      // Optionally refresh data after probing
+      await fetchData()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      setError(`Probe failed: ${message}`)
+    } finally {
+      setProbing(false)
+    }
+  }
+
   useEffect(() => {
     fetchData()
-  }, [])
+    
+    if (!autoProbe) return
+    
+    // Auto-run probes every 30 seconds
+    const probeInterval = setInterval(() => {
+      runProbes()
+    }, 30000)
+    
+    return () => clearInterval(probeInterval)
+  }, [autoProbe])
 
   const metrics = useMemo(() => {
     const items = data?.items ?? []
@@ -148,6 +198,23 @@ function App() {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              className={`rounded-full border px-3 py-2 text-xs font-semibold transition ${
+                autoProbe
+                  ? 'border-emerald-400/60 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/25'
+                  : 'border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+              }`}
+              onClick={() => setAutoProbe(!autoProbe)}
+            >
+              Auto-probe: {autoProbe ? 'ON' : 'OFF'} (30s)
+            </button>
+            <button
+              className="rounded-xl border border-[#3a3d44] bg-[linear-gradient(135deg,#1b1d23,#14161c)] px-4 py-2 text-sm font-semibold text-zinc-100 shadow-[0_12px_28px_rgba(0,0,0,0.35)] transition duration-200 ease-out hover:-translate-y-[1px] hover:border-[#3a3d44] disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={runProbes}
+              disabled={probing}
+            >
+              {probing ? 'Probing…' : 'Run Probes'}
+            </button>
             <button
               className="rounded-xl border border-[#3a3d44] bg-[linear-gradient(135deg,#1b1d23,#14161c)] px-4 py-2 text-sm font-semibold text-zinc-100 shadow-[0_12px_28px_rgba(0,0,0,0.35)] transition duration-200 ease-out hover:-translate-y-[1px] hover:border-[#3a3d44] disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
               onClick={fetchData}
@@ -325,6 +392,16 @@ function App() {
                 </div>
               ))}
               {!data?.items?.length && <p className="text-sm text-zinc-300">No endpoints discovered yet.</p>}
+            </div>
+          </article>
+
+          <article
+            className="mt-4 mb-4 break-inside-avoid rounded-xl border border-[#22242b] bg-[linear-gradient(160deg,#131419_0%,#0f1014_100%)] p-4 text-zinc-100 shadow-[0_16px_40px_rgba(0,0,0,0.28)]"
+            style={{ columnSpan: 'all' }}
+          >
+            <div className="mb-3 text-sm font-semibold tracking-wide">Latency trends</div>
+            <div className="h-[400px]">
+              <LatencyChart />
             </div>
           </article>
         </section>

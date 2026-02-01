@@ -248,6 +248,45 @@ def dump_verifications_csv(
 	return file_path
 
 
+def fetch_probes(path: str | None = None, limit: int | None = None) -> List[dict]:
+	"""Return probe records as dicts, ordered by timestamp desc."""
+	
+	db_path = _db_path(path)
+	_ensure_parent_dir(db_path)
+	
+	conn = sqlite3.connect(db_path)
+	try:
+		_ensure_schema(conn)
+		
+		query = """
+			SELECT ip, model, success, latency_ms, status_code, error, body, ts
+			FROM probes
+			ORDER BY ts DESC
+		"""
+		
+		if limit:
+			query += f" LIMIT {limit}"
+		
+		cur = conn.execute(query)
+		rows = cur.fetchall()
+	finally:
+		conn.close()
+	
+	results: List[dict] = []
+	for ip, model, success, latency, status_code, error, body, ts in rows:
+		results.append({
+			"ip": ip,
+			"model": model,
+			"success": bool(success),
+			"latency_ms": latency,
+			"status_code": status_code,
+			"error": error,
+			"body": body,
+			"timestamp": ts,
+		})
+	
+	return results
+
 def store_probes(results: Sequence[dict], path: str | None = None) -> int:
 	"""Persist probe results in the probes table."""
 
@@ -297,3 +336,4 @@ def store_probes(results: Sequence[dict], path: str | None = None) -> int:
 		return conn.total_changes - before
 	finally:
 		conn.close()
+
