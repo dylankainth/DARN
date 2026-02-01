@@ -8,9 +8,6 @@ const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'h
 const API_VERIFICATIONS = `${API_BASE.replace(/\/+$/, '')}/verifications`
 const API_RUN_PROBES = `${API_BASE.replace(/\/+$/, '')}/run-probes`
 import PaginatedIpList from './components/PaginatedIpList'
-
-const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8000'
-const API_VERIFICATIONS = `${API_BASE.replace(/\/+$/, '')}/verifications`
 const API_REFRESH = `${API_BASE.replace(/\/+$/, '')}/refresh`
 
 type VerificationRow = {
@@ -119,14 +116,14 @@ function App() {
 
   useEffect(() => {
     fetchData()
-    
+
     if (!autoProbe) return
-    
+
     // Auto-run probes every 30 seconds
     const probeInterval = setInterval(() => {
       runProbes()
     }, 30000)
-    
+
     return () => clearInterval(probeInterval)
   }, [autoProbe])
 
@@ -176,11 +173,10 @@ function App() {
           </div>
           <div className="flex items-center gap-3">
             <button
-              className={`rounded-full border px-3 py-2 text-xs font-semibold transition ${
-                autoProbe
-                  ? 'border-emerald-400/60 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/25'
-                  : 'border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-              }`}
+              className={`rounded-full border px-3 py-2 text-xs font-semibold transition ${autoProbe
+                ? 'border-emerald-400/60 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/25'
+                : 'border-zinc-600 bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                }`}
               onClick={() => setAutoProbe(!autoProbe)}
             >
               Auto-probe: {autoProbe ? 'ON' : 'OFF'} (30s)
@@ -389,61 +385,56 @@ function App() {
           </article>
         </section>
       </main>
-          </article >
-        </section >
-      </main >
 
-      {
-        modalRow && (
+      {modalRow && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+          onClick={() => setModalRow(null)}
+        >
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
-            onClick={() => setModalRow(null)}
+            className="w-full max-w-md rounded-xl border border-[#22242b] bg-[#0f1014] p-6 text-zinc-100 shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
+            onClick={(e) => e.stopPropagation()}
           >
-            <div
-              className="w-full max-w-md rounded-xl border border-[#22242b] bg-[#0f1014] p-6 text-zinc-100 shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-zinc-400">Endpoint</div>
-                  <div className="font-mono text-lg">{modalRow.ip}</div>
-                </div>
-                <button
-                  className="rounded-full border border-[#3a3d44] bg-[#16171d] px-3 py-1 text-xs font-semibold text-zinc-200 transition hover:border-zinc-400"
-                  onClick={() => setModalRow(null)}
-                >
-                  Close
-                </button>
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <div className="text-xs uppercase tracking-[0.2em] text-zinc-400">Endpoint</div>
+                <div className="font-mono text-lg">{modalRow.ip}</div>
               </div>
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center justify-between rounded-lg border border-[#1f2128] bg-[#0f1014] px-3 py-2">
-                  <span className="text-zinc-300">Status</span>
-                  <span className={`font-semibold ${modalRow.ok ? 'text-emerald-200' : 'text-rose-200'}`}>
-                    {modalRow.ok ? 'OK' : 'FAIL'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between rounded-lg border border-[#1f2128] bg-[#0f1014] px-3 py-2">
-                  <span className="text-zinc-300">Latency</span>
-                  <span className="font-semibold">{formatLatency(modalRow.latency_ms)}</span>
-                </div>
-                <div className="rounded-lg border border-[#1f2128] bg-[#0f1014] px-3 py-2">
-                  <div className="text-zinc-300">Error</div>
-                  <div className="text-sm text-zinc-100">{modalRow.error || 'Unknown error'}</div>
-                </div>
-                <div className="rounded-lg border border-[#1f2128] bg-[#0f1014] px-3 py-2">
-                  <div className="text-zinc-300">Checked at</div>
-                  <div className="text-sm text-zinc-100">{formatTime(modalRow.checked_at)}</div>
-                </div>
-                <div className="rounded-lg border border-[#1f2128] bg-[#0f1014] px-3 py-2">
-                  <div className="text-zinc-300">Models</div>
-                  <div className="text-sm text-zinc-100">{modalRow.models.join(', ') || 'No models reported'}</div>
-                </div>
+              <button
+                className="rounded-full border border-[#3a3d44] bg-[#16171d] px-3 py-1 text-xs font-semibold text-zinc-200 transition hover:border-zinc-400"
+                onClick={() => setModalRow(null)}
+              >
+                Close
+              </button>
+            </div>
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center justify-between rounded-lg border border-[#1f2128] bg-[#0f1014] px-3 py-2">
+                <span className="text-zinc-300">Status</span>
+                <span className={`font-semibold ${modalRow.ok ? 'text-emerald-200' : 'text-rose-200'}`}>
+                  {modalRow.ok ? 'OK' : 'FAIL'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between rounded-lg border border-[#1f2128] bg-[#0f1014] px-3 py-2">
+                <span className="text-zinc-300">Latency</span>
+                <span className="font-semibold">{formatLatency(modalRow.latency_ms)}</span>
+              </div>
+              <div className="rounded-lg border border-[#1f2128] bg-[#0f1014] px-3 py-2">
+                <div className="text-zinc-300">Error</div>
+                <div className="text-sm text-zinc-100">{modalRow.error || 'Unknown error'}</div>
+              </div>
+              <div className="rounded-lg border border-[#1f2128] bg-[#0f1014] px-3 py-2">
+                <div className="text-zinc-300">Checked at</div>
+                <div className="text-sm text-zinc-100">{formatTime(modalRow.checked_at)}</div>
+              </div>
+              <div className="rounded-lg border border-[#1f2128] bg-[#0f1014] px-3 py-2">
+                <div className="text-zinc-300">Models</div>
+                <div className="text-sm text-zinc-100">{modalRow.models.join(', ') || 'No models reported'}</div>
               </div>
             </div>
           </div>
-        )
-      }
-    </div >
+        </div>
+      )}
+    </div>
   )
 }
 

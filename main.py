@@ -140,6 +140,11 @@ def run_probes() -> dict[str, object]:
             "message": f"Probed {len(probe_results)} endpoint(s)",
             "probes_run": len(probe_results),
             "probes_stored": probe_stored,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @app.get("/ip/{ip}")
 def get_ip_details(ip: str) -> dict[str, object]:
     """Get detailed information about a specific IP including verification and probe history."""
