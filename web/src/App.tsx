@@ -48,24 +48,44 @@ function App() {
       setData(json)
 
       const items = json.items ?? []
+      const geocodeIp = async (ip: string) => {
+        const tryProviders = [
+          async () => {
+            const r = await fetch(`https://ipapi.co/${ip}/json/`)
+            if (!r.ok) return null
+            const g = await r.json()
+            const lat = typeof g.lat === 'number' ? g.lat : Number(g.latitude)
+            const lon = typeof g.lon === 'number' ? g.lon : Number(g.longitude)
+            return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null
+          },
+          async () => {
+            const r = await fetch(`https://ipwho.is/${ip}`)
+            if (!r.ok) return null
+            const g = await r.json()
+            const lat = Number(g.latitude)
+            const lon = Number(g.longitude)
+            return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null
+          },
+        ]
+        for (const fn of tryProviders) {
+          try {
+            const res = await fn()
+            if (res) return res
+          } catch (_) {
+            // ignore and try next
+          }
+        }
+        return null
+      }
+
       const enriched = await Promise.all(
         items.map(async (item) => {
           if (typeof item.lat === 'number' && typeof item.lon === 'number') {
             return item as VerificationRow & { lat: number; lon: number }
           }
-          try {
-            const geoResp = await fetch(`https://ipapi.co/${item.ip}/json/`)
-            if (!geoResp.ok) return null
-            const geo = await geoResp.json()
-            const lat = typeof geo.lat === 'number' ? geo.lat : Number(geo.latitude)
-            const lon = typeof geo.lon === 'number' ? geo.lon : Number(geo.longitude)
-            if (Number.isFinite(lat) && Number.isFinite(lon)) {
-              return { ...(item as VerificationRow), lat, lon }
-            }
-            return null
-          } catch {
-            return null
-          }
+          const geo = await geocodeIp(item.ip)
+          if (geo) return { ...(item as VerificationRow), ...geo }
+          return null
         })
       )
 
@@ -268,7 +288,9 @@ function App() {
           >
             <div className="mb-3 text-sm font-semibold tracking-wide">Geographic view</div>
             {mapItems.length === 0 ? (
-              <p className="text-sm text-zinc-300">No coordinates available for mapping.</p>
+              <p className="text-sm text-zinc-300">
+                No coordinates available for mapping (geo lookup may have failed or been rate limited).
+              </p>
             ) : (
               <div className="h-[360px] w-full overflow-hidden rounded-lg border border-[#1f2128] bg-[#0f1014]">
                 <ServerMap

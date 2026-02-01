@@ -27,3 +27,15 @@ body {
 a {
   color: inherit;
 }
+
+.bw-tiles {
+  filter: grayscale(1) contrast(1.25) brightness(0.2);
+}
+
+.leaflet-container {
+  background: #0f0f12;
+}
+
+.pin-icon {
+  filter: brightness(0) invert(1) drop-shadow(0 2px 2px rgba(0, 0, 0, 0.4));
+}

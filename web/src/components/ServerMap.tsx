@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
+import pinUrl from '../assets/pin.svg'
 import 'leaflet/dist/leaflet.css'
 
 type Item = {
@@ -31,6 +32,13 @@ function FitBounds({ items }: { items: Item[] }) {
 }
 
 export default function ServerMap({ items }: { items: Item[] }) {
+  const icon = L.icon({
+    iconUrl: pinUrl,
+    iconSize: [30, 40],
+    iconAnchor: [15, 40],
+    popupAnchor: [0, -34],
+    className: 'pin-icon',
+  })
   return (
     <MapContainer
       className="map-container"
@@ -43,13 +51,15 @@ export default function ServerMap({ items }: { items: Item[] }) {
     >
       <TileLayer
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution="&copy; OpenStreetMap contributors"
+        subdomains={["a", "b", "c"]}
+        className="bw-tiles"
+        attribution="© OpenStreetMap contributors"
       />
 
       <FitBounds items={items} />
 
       {items.map((item, idx) => (
-        <Marker key={idx} position={[item.lat, item.lon]}>
+        <Marker key={idx} position={[item.lat, item.lon]} icon={icon}>
           <Popup>
             <strong>IP:</strong> {item.ip} <br />
             <strong>Status:</strong> {item.ok ? 'OK' : 'Fail'} <br />
