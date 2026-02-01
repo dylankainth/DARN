@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import sys
+import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,7 +15,9 @@ from fastapi import HTTPException
 from core.discovery import DiscoveryError, discover_candidates
 from core.probe import probe_node
 from core.scoring import rank_verifications
+from core.geoip import geolocate_ip
 from core.store import (
+_db_path,
     dump_verifications_csv,
     fetch_verifications,
     fetch_probes,
@@ -24,6 +29,9 @@ from core.store import (
 )
 from core.verify import verify_endpoint
 from dotenv import load_dotenv
+
+DEFAULT_OLLAMA_PORT = 11434
+GENERATE_PATH = "/api/generate"
 
 
 # Load variables from .env so the DB path/env overrides are available to the API.
@@ -53,6 +61,20 @@ def read_root() -> dict[str, str]:
 def list_verifications() -> dict[str, object]:
     try:
         records = fetch_verifications()
+        
+        # Backfill missing locations
+        needs_update = []
+        for rec in records:
+            if rec.get("lat") is None or rec.get("lon") is None:
+                geo = geolocate_ip(rec["ip"])
+                if geo:
+                    rec.update(geo)
+                    needs_update.append(rec)
+        
+        # Store updated records
+        if needs_update:
+            store_verifications(needs_update)
+            
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"count": len(records), "items": records}
@@ -118,6 +140,205 @@ def run_probes() -> dict[str, object]:
             "message": f"Probed {len(probe_results)} endpoint(s)",
             "probes_run": len(probe_results),
             "probes_stored": probe_stored,
+@app.get("/ip/{ip}")
+def get_ip_details(ip: str) -> dict[str, object]:
+    """Get detailed information about a specific IP including verification and probe history."""
+    try:
+        from core.store import _db_path
+        import sqlite3
+        
+        db_file = _db_path()
+        conn = sqlite3.connect(db_file)
+        
+        # Fetch verification
+        cur = conn.execute(
+            "SELECT ip, ok, models, latency_ms, error, lat, lon, city, region, country, checked_at FROM verifications WHERE ip = ?",
+            (ip,)
+        )
+        verify_row = cur.fetchone()
+        if not verify_row:
+            conn.close()
+            raise HTTPException(status_code=404, detail=f"IP {ip} not found")
+        
+        models_json = verify_row[2]
+        models = []
+        if models_json:
+            try:
+                import json
+                models = json.loads(models_json)
+            except:
+                pass
+        
+        verification = {
+            "ip": verify_row[0],
+            "ok": bool(verify_row[1]),
+            "models": models,
+            "latency_ms": verify_row[3],
+            "error": verify_row[4],
+            "checked_at": verify_row[10],
+        }
+        
+        # Add location data if available
+        if verify_row[5] is not None and verify_row[6] is not None:
+            verification["lat"] = verify_row[5]
+            verification["lon"] = verify_row[6]
+            if verify_row[7]:
+                verification["city"] = verify_row[7]
+            if verify_row[8]:
+                verification["region"] = verify_row[8]
+            if verify_row[9]:
+                verification["country"] = verify_row[9]
+        
+        # Fetch probes
+        cur = conn.execute(
+            """SELECT ip, model, success, latency_ms, status_code, error, body, ts 
+               FROM probes WHERE ip = ? ORDER BY ts DESC LIMIT 100""",
+            (ip,)
+        )
+        probe_rows = cur.fetchall()
+        probes = [
+            {
+                "ip": row[0],
+                "model": row[1],
+                "success": bool(row[2]),
+                "latency_ms": row[3],
+                "status_code": row[4],
+                "error": row[5],
+                "body": row[6],
+                "ts": row[7],
+            }
+            for row in probe_rows
+        ]
+        
+        conn.close()
+        
+        return {"verification": verification, "probes": probes}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/chat/choices")
+def list_ranked_choices() -> dict[str, object]:
+    try:
+        records = fetch_verifications()
+        ranked = rank_verifications(records)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Only keep entries with available models
+    ranked = [r for r in ranked if r.get("models")]
+    return {"count": len(ranked), "items": ranked}
+
+
+def _build_chat_url(ip: str, port: int = DEFAULT_OLLAMA_PORT, path: str = GENERATE_PATH) -> str:
+    if ip.startswith("http://") or ip.startswith("https://"):
+        base = ip.rstrip("/")
+    elif ":" in ip and ip.count(":") == 1:
+        base = f"http://{ip}"
+    else:
+        base = f"http://{ip}:{port}"
+    return f"{base}{path}"
+
+
+@app.post("/chat/relay")
+def chat_relay(
+    *,
+    ip: str,
+    model: str,
+    prompt: str,
+    temperature: float = 0.7,
+    max_tokens: int = 256,
+    timeout: float = 15.0,
+) -> dict[str, object]:
+    if not ip or not model or not prompt:
+        raise HTTPException(status_code=400, detail="ip, model, and prompt are required")
+
+    url = _build_chat_url(ip)
+    payload = {
+        "model": model,
+        "prompt": prompt,
+        "stream": False,
+        "options": {
+            "temperature": temperature,
+            "num_predict": max_tokens,
+        },
+    }
+
+    try:
+        resp = requests.post(url, json=payload, timeout=timeout)
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"Upstream error: {exc}") from exc
+
+    if resp.status_code != 200:
+        raise HTTPException(status_code=resp.status_code, detail=resp.text)
+
+    try:
+        data = resp.json()
+    except ValueError:
+        data = {"text": resp.text}
+
+    return {"upstream": url, "model": model, "ip": ip, "data": data}
+
+
+@app.post("/refresh")
+def refresh_all() -> dict[str, object]:
+    """Delete stored data and re-run discovery + verification."""
+    try:
+        # Delete SQLite DB
+        db_file = _db_path()
+        if os.path.exists(db_file):
+            os.remove(db_file)
+        
+        # Delete CSV
+        csv_file = os.path.abspath("verifications.csv")
+        if os.path.exists(csv_file):
+            os.remove(csv_file)
+        
+        # Run discovery
+        try:
+            candidates = discover_candidates()
+        except DiscoveryError as exc:
+            raise HTTPException(status_code=500, detail=f"Discovery failed: {exc}") from exc
+        
+        if not candidates:
+            return {"message": "No candidates found", "count": 0}
+        
+        # Store endpoints
+        inserted = store_endpoints(candidates)
+        
+        # Verify endpoints in parallel
+        results = []
+        with ThreadPoolExecutor(max_workers=50) as executor:
+            future_to_ip = {executor.submit(verify_endpoint, ip): (idx, ip) for idx, ip in enumerate(candidates, 1)}
+            for future in as_completed(future_to_ip):
+                idx, ip = future_to_ip[future]
+                try:
+                    result = future.result()
+                    results.append(result)
+                    status = "✓" if result.get("ok") else "✗"
+                    print(f"[{len(results)}/{len(candidates)}] {status} {ip}")
+                except Exception as exc:
+                    print(f"[{len(results)+1}/{len(candidates)}] ✗ {ip} - {exc}")
+                    results.append({"ip": ip, "ok": False, "models": [], "latency_ms": None, "error": str(exc)})
+        stored = store_verifications(results)
+        dump_verifications_csv()
+        
+        # Probe healthy endpoints
+        probe_candidates = [r for r in results if r.get("ok") and r.get("models")]
+        probe_results = [probe_node(r["ip"], r.get("models", [])) for r in probe_candidates]
+        probe_stored = store_probes(probe_results) if probe_results else 0
+        
+        healthy = sum(1 for r in results if r.get("ok"))
+        
+        return {
+            "message": "Refresh complete",
+            "discovered": inserted,
+            "verified": stored,
+            "probed": probe_stored,
+            "healthy": healthy,
+            "total": len(results),
         }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -152,7 +373,20 @@ def main() -> int:
         print("No endpoints available to verify.")
         return 0
 
-    results = [verify_endpoint(ip) for ip in endpoints]
+    results = []
+    print(f"Verifying {len(endpoints)} endpoints in parallel...")
+    with ThreadPoolExecutor(max_workers=50) as executor:
+        future_to_ip = {executor.submit(verify_endpoint, ip): (idx, ip) for idx, ip in enumerate(endpoints, 1)}
+        for future in as_completed(future_to_ip):
+            idx, ip = future_to_ip[future]
+            try:
+                result = future.result()
+                results.append(result)
+                status = "✓" if result.get("ok") else "✗"
+                print(f"[{len(results)}/{len(endpoints)}] {status} {ip}")
+            except Exception as exc:
+                print(f"[{len(results)+1}/{len(endpoints)}] ✗ {ip} - {exc}")
+                results.append({"ip": ip, "ok": False, "models": [], "latency_ms": None, "error": str(exc)})
     stored = store_verifications(results)
     csv_path = dump_verifications_csv()
 

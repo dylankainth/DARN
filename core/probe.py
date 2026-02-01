@@ -15,6 +15,26 @@ PROBE_PROMPT = "Reply with exactly the word 'ping'."
 PROBE_PREFERENCE: List[str] = ["llama3", "phi", "mistral", "qwen"]
 
 
+def _extract_response_text(resp: requests.Response) -> str:
+	"""Pull response text regardless of whether body is JSON or plain text."""
+
+	text_body = resp.text or ""
+	try:
+		data = resp.json()
+		if isinstance(data, dict):
+			text_body = data.get("response") or data.get("message", {}).get("content") or text_body
+	except ValueError:
+		pass
+	return text_body if isinstance(text_body, str) else str(text_body)
+
+
+def _is_ping(text: str) -> bool:
+	"""Check if the model replied with exactly 'ping' (case/spacing-insensitive)."""
+
+	normalized = "".join(ch for ch in text.lower() if ch.isalpha())
+	return normalized == "ping"
+
+
 def _build_url(host: str, port: int = DEFAULT_PORT, path: str = PROBE_PATH) -> str:
 	"""Return an http URL for the given host."""
 
@@ -90,8 +110,9 @@ def probe_node(
 			"ts": time.time(),
 		}
 
-	text_body = resp.text or ""
-	success = resp.status_code == 200 or bool(text_body)
+	text_body = _extract_response_text(resp)
+	success = resp.status_code == 200 and _is_ping(text_body)
+	error = None if success else ("unexpected_output" if resp.status_code == 200 else f"status {resp.status_code}")
 
 	return {
 		"ip": ip,
@@ -100,6 +121,7 @@ def probe_node(
 		"latency_ms": latency_ms,
 		"status_code": resp.status_code,
 		"body": text_body,
+		"error": error,
 		"ts": time.time(),
 	}
 

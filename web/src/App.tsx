@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import Navbar from './Navbar'
 import ServerMap from './components/ServerMap'
 import LatencyChart from './components/LatencyChart'
@@ -6,6 +7,11 @@ import LatencyChart from './components/LatencyChart'
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8000'
 const API_VERIFICATIONS = `${API_BASE.replace(/\/+$/, '')}/verifications`
 const API_RUN_PROBES = `${API_BASE.replace(/\/+$/, '')}/run-probes`
+import PaginatedIpList from './components/PaginatedIpList'
+
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8000'
+const API_VERIFICATIONS = `${API_BASE.replace(/\/+$/, '')}/verifications`
+const API_REFRESH = `${API_BASE.replace(/\/+$/, '')}/refresh`
 
 type VerificationRow = {
   ip: string
@@ -61,59 +67,31 @@ function App() {
   const [modalRow, setModalRow] = useState<VerificationRow | null>(null)
   const [mapItems, setMapItems] = useState<Array<VerificationRow & { lat: number; lon: number }>>([])
 
-  const fetchData = async () => {
+  const fetchData = async (forceRefresh = false) => {
     setLoading(true)
     setError(null)
 
     try {
+      if (forceRefresh) {
+        const refreshResp = await fetch(API_REFRESH, { method: 'POST' })
+        if (!refreshResp.ok) {
+          const text = await refreshResp.text()
+          throw new Error(text || `Refresh failed with status ${refreshResp.status}`)
+        }
+      }
+
       const resp = await fetch(API_VERIFICATIONS)
       if (!resp.ok) throw new Error(`Request failed with status ${resp.status}`)
       const json = (await resp.json()) as VerificationPayload
       setData(json)
 
+      // Filter items that have lat/lon from backend
       const items = json.items ?? []
-      const geocodeIp = async (ip: string) => {
-        const tryProviders = [
-          async () => {
-            const r = await fetch(`https://ipapi.co/${ip}/json/`)
-            if (!r.ok) return null
-            const g = await r.json()
-            const lat = typeof g.lat === 'number' ? g.lat : Number(g.latitude)
-            const lon = typeof g.lon === 'number' ? g.lon : Number(g.longitude)
-            return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null
-          },
-          async () => {
-            const r = await fetch(`https://ipwho.is/${ip}`)
-            if (!r.ok) return null
-            const g = await r.json()
-            const lat = Number(g.latitude)
-            const lon = Number(g.longitude)
-            return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null
-          },
-        ]
-        for (const fn of tryProviders) {
-          try {
-            const res = await fn()
-            if (res) return res
-          } catch (_) {
-            // ignore and try next
-          }
-        }
-        return null
-      }
+      const itemsWithLocation = items.filter(
+        (item) => typeof item.lat === 'number' && typeof item.lon === 'number'
+      ) as Array<VerificationRow & { lat: number; lon: number }>
 
-      const enriched = await Promise.all(
-        items.map(async (item) => {
-          if (typeof item.lat === 'number' && typeof item.lon === 'number') {
-            return item as VerificationRow & { lat: number; lon: number }
-          }
-          const geo = await geocodeIp(item.ip)
-          if (geo) return { ...(item as VerificationRow), ...geo }
-          return null
-        })
-      )
-
-      setMapItems(enriched.filter(Boolean) as Array<VerificationRow & { lat: number; lon: number }>)
+      setMapItems(itemsWithLocation)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       setError(message)
@@ -176,15 +154,14 @@ function App() {
         modelFrequency.set(m, (modelFrequency.get(m) ?? 0) + 1)
       })
     })
-    const topModels = Array.from(modelFrequency.entries())
+    const allModels = Array.from(modelFrequency.entries())
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 4)
-      .map(([name, count]) => `${name} ×${count}`)
 
     const recent = items.slice(0, 6)
-    const failing = items.filter((r) => !r.ok).slice(0, 4)
+    const failing = items.filter((r) => !r.ok)
+    const successful = items.filter((r) => r.ok)
 
-    return { total, healthy, unhealthy, successRate, avgLatency, fastest, topModels, recent, failing }
+    return { total, healthy, unhealthy, successRate, avgLatency, fastest, allModels, recent, failing, successful }
   }, [data])
 
   return (
@@ -217,7 +194,7 @@ function App() {
             </button>
             <button
               className="rounded-xl border border-[#3a3d44] bg-[linear-gradient(135deg,#1b1d23,#14161c)] px-4 py-2 text-sm font-semibold text-zinc-100 shadow-[0_12px_28px_rgba(0,0,0,0.35)] transition duration-200 ease-out hover:-translate-y-[1px] hover:border-[#3a3d44] disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
-              onClick={fetchData}
+              onClick={() => fetchData(true)}
               disabled={loading}
             >
               {loading ? 'Refreshing…' : 'Refresh now'}
@@ -273,7 +250,9 @@ function App() {
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between rounded-lg border border-[#1f2128] bg-[#0f1014] px-3 py-2">
                   <span>Fastest</span>
-                  <span className="text-sm text-zinc-300">{metrics.fastest.ip}</span>
+                  <Link to={`/ip/${metrics.fastest.ip}`} className="text-sm text-zinc-300 hover:text-zinc-100 transition">
+                    {metrics.fastest.ip}
+                  </Link>
                 </div>
                 <div className="flex items-center justify-between rounded-lg border border-[#1f2128] bg-[#0f1014] px-3 py-2">
                   <span>Latency</span>
@@ -284,22 +263,25 @@ function App() {
           </article>
 
           <article className="mb-4 break-inside-avoid rounded-xl border border-[#22242b] bg-[linear-gradient(160deg,#131419_0%,#0f1014_100%)] p-4 text-zinc-100 shadow-[0_16px_40px_rgba(0,0,0,0.28)]">
-            <div className="mb-3 text-sm font-semibold tracking-wide">Models in the wild</div>
-            <ul className="mb-2 flex flex-wrap gap-2">
-              {metrics.topModels.length > 0 ? (
-                metrics.topModels.map((m) => (
-                  <li
-                    key={m}
-                    className="rounded-full border border-[#262930] bg-[#15171d] px-3 py-1 text-sm font-semibold"
+            <div className="mb-3 flex items-center justify-between">
+              <div className="text-sm font-semibold tracking-wide">Models in the wild</div>
+              <div className="text-xs text-zinc-400">{metrics.allModels.length} models</div>
+            </div>
+            {metrics.allModels.length > 0 ? (
+              <div className="space-y-1 max-h-[300px] overflow-y-auto custom-scrollbar">
+                {metrics.allModels.map(([name, count]) => (
+                  <div
+                    key={name}
+                    className="flex items-center justify-between rounded-lg border border-[#1f2128] bg-[#0f1014] px-3 py-2"
                   >
-                    {m}
-                  </li>
-                ))
-              ) : (
-                <li className="text-sm text-zinc-300">No models reported yet.</li>
-              )}
-            </ul>
-            <p className="text-sm text-zinc-300">Top variants by frequency across verified hosts.</p>
+                    <span className="text-sm truncate mr-2">{name}</span>
+                    <span className="text-xs font-semibold text-zinc-400 flex-shrink-0">×{count}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-zinc-300">No models reported yet.</p>
+            )}
           </article>
 
           <article className="mb-4 break-inside-avoid rounded-xl border border-[#22242b] bg-[linear-gradient(160deg,#131419_0%,#0f1014_100%)] p-4 text-zinc-100 shadow-[0_16px_40px_rgba(0,0,0,0.28)] min-h-[260px]">
@@ -311,7 +293,9 @@ function App() {
                   className="flex items-center justify-between rounded-lg border border-[#1f2128] bg-[#0f1014] px-3 py-2"
                 >
                   <div>
-                    <div className="font-mono text-sm">{row.ip}</div>
+                    <Link to={`/ip/${row.ip}`} className="font-mono text-sm hover:text-zinc-300 transition">
+                      {row.ip}
+                    </Link>
                     <div className="text-sm text-zinc-300">{formatTime(row.checked_at)}</div>
                   </div>
                   <div className="flex gap-2">
@@ -330,24 +314,19 @@ function App() {
             </div>
           </article>
 
-          <article className="mb-4 break-inside-avoid rounded-xl border border-[#22242b] bg-[linear-gradient(160deg,#131419_0%,#0f1014_100%)] p-4 text-zinc-100 shadow-[0_16px_40px_rgba(0,0,0,0.28)] min-h-[260px]">
-            <div className="mb-3 text-sm font-semibold tracking-wide">Failures</div>
-            {metrics.failing.length === 0 && <p className="text-sm text-zinc-300">No failing endpoints.</p>}
-            {metrics.failing.map((row) => (
-              <div
-                key={row.ip + row.checked_at}
-                className="mb-2 flex items-center justify-between rounded-lg border border-[#1f2128] bg-[#0f1014] px-3 py-2 last:mb-0"
-              >
-                <div className="font-mono text-sm">{row.ip}</div>
-                <button
-                  className="rounded-lg border border-rose-400/60 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-50 transition hover:border-rose-300 hover:bg-rose-500/20"
-                  onClick={() => setModalRow(row)}
-                >
-                  View details
-                </button>
-              </div>
-            ))}
-          </article>
+          <PaginatedIpList
+            title="Failures"
+            items={metrics.failing}
+            itemsPerPage={5}
+            showDetailsButton={true}
+            onViewDetails={setModalRow}
+          />
+
+          <PaginatedIpList
+            title="Successes"
+            items={metrics.successful}
+            itemsPerPage={5}
+          />
 
           <article
             className="mt-4 mb-4 break-inside-avoid rounded-xl border border-[#22242b] bg-[linear-gradient(160deg,#131419_0%,#0f1014_100%)] p-4 text-zinc-100 shadow-[0_16px_40px_rgba(0,0,0,0.28)]"
@@ -380,7 +359,11 @@ function App() {
             <div className="mb-3 text-sm font-semibold tracking-wide">Inventory snapshot</div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {data?.items?.slice(0, 8).map((row) => (
-                <div key={row.ip} className="rounded-lg border border-[#20232a] bg-[#121317] p-3">
+                <Link
+                  key={row.ip}
+                  to={`/ip/${row.ip}`}
+                  className="rounded-lg border border-[#20232a] bg-[#121317] p-3 transition hover:border-[#2a2d35] hover:bg-[#16181d]"
+                >
                   <div className="mb-2 flex items-center gap-2">
                     <span className={`h-2.5 w-2.5 rounded-full ${row.ok ? 'bg-emerald-400' : 'bg-rose-400'}`} />
                     <span className="font-mono text-sm">{row.ip}</span>
@@ -389,7 +372,7 @@ function App() {
                     <span className="truncate text-zinc-200">{row.models.join(', ') || 'no models'}</span>
                     <span className="text-xs text-zinc-300">{formatLatency(row.latency_ms)}</span>
                   </div>
-                </div>
+                </Link>
               ))}
               {!data?.items?.length && <p className="text-sm text-zinc-300">No endpoints discovered yet.</p>}
             </div>
@@ -406,56 +389,61 @@ function App() {
           </article>
         </section>
       </main>
+          </article >
+        </section >
+      </main >
 
-      {modalRow && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
-          onClick={() => setModalRow(null)}
-        >
+      {
+        modalRow && (
           <div
-            className="w-full max-w-md rounded-xl border border-[#22242b] bg-[#0f1014] p-6 text-zinc-100 shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+            onClick={() => setModalRow(null)}
           >
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <div className="text-xs uppercase tracking-[0.2em] text-zinc-400">Endpoint</div>
-                <div className="font-mono text-lg">{modalRow.ip}</div>
+            <div
+              className="w-full max-w-md rounded-xl border border-[#22242b] bg-[#0f1014] p-6 text-zinc-100 shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <div className="text-xs uppercase tracking-[0.2em] text-zinc-400">Endpoint</div>
+                  <div className="font-mono text-lg">{modalRow.ip}</div>
+                </div>
+                <button
+                  className="rounded-full border border-[#3a3d44] bg-[#16171d] px-3 py-1 text-xs font-semibold text-zinc-200 transition hover:border-zinc-400"
+                  onClick={() => setModalRow(null)}
+                >
+                  Close
+                </button>
               </div>
-              <button
-                className="rounded-full border border-[#3a3d44] bg-[#16171d] px-3 py-1 text-xs font-semibold text-zinc-200 transition hover:border-zinc-400"
-                onClick={() => setModalRow(null)}
-              >
-                Close
-              </button>
-            </div>
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center justify-between rounded-lg border border-[#1f2128] bg-[#0f1014] px-3 py-2">
-                <span className="text-zinc-300">Status</span>
-                <span className={`font-semibold ${modalRow.ok ? 'text-emerald-200' : 'text-rose-200'}`}>
-                  {modalRow.ok ? 'OK' : 'FAIL'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between rounded-lg border border-[#1f2128] bg-[#0f1014] px-3 py-2">
-                <span className="text-zinc-300">Latency</span>
-                <span className="font-semibold">{formatLatency(modalRow.latency_ms)}</span>
-              </div>
-              <div className="rounded-lg border border-[#1f2128] bg-[#0f1014] px-3 py-2">
-                <div className="text-zinc-300">Error</div>
-                <div className="text-sm text-zinc-100">{modalRow.error || 'Unknown error'}</div>
-              </div>
-              <div className="rounded-lg border border-[#1f2128] bg-[#0f1014] px-3 py-2">
-                <div className="text-zinc-300">Checked at</div>
-                <div className="text-sm text-zinc-100">{formatTime(modalRow.checked_at)}</div>
-              </div>
-              <div className="rounded-lg border border-[#1f2128] bg-[#0f1014] px-3 py-2">
-                <div className="text-zinc-300">Models</div>
-                <div className="text-sm text-zinc-100">{modalRow.models.join(', ') || 'No models reported'}</div>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center justify-between rounded-lg border border-[#1f2128] bg-[#0f1014] px-3 py-2">
+                  <span className="text-zinc-300">Status</span>
+                  <span className={`font-semibold ${modalRow.ok ? 'text-emerald-200' : 'text-rose-200'}`}>
+                    {modalRow.ok ? 'OK' : 'FAIL'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between rounded-lg border border-[#1f2128] bg-[#0f1014] px-3 py-2">
+                  <span className="text-zinc-300">Latency</span>
+                  <span className="font-semibold">{formatLatency(modalRow.latency_ms)}</span>
+                </div>
+                <div className="rounded-lg border border-[#1f2128] bg-[#0f1014] px-3 py-2">
+                  <div className="text-zinc-300">Error</div>
+                  <div className="text-sm text-zinc-100">{modalRow.error || 'Unknown error'}</div>
+                </div>
+                <div className="rounded-lg border border-[#1f2128] bg-[#0f1014] px-3 py-2">
+                  <div className="text-zinc-300">Checked at</div>
+                  <div className="text-sm text-zinc-100">{formatTime(modalRow.checked_at)}</div>
+                </div>
+                <div className="rounded-lg border border-[#1f2128] bg-[#0f1014] px-3 py-2">
+                  <div className="text-zinc-300">Models</div>
+                  <div className="text-sm text-zinc-100">{modalRow.models.join(', ') || 'No models reported'}</div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   )
 }
 
