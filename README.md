@@ -1,11 +1,6 @@
 # Distributed AI Ranked Network
 
-AKA DARN IT!
-
-
-![DARN IT](https://y.yarn.co/1bd7d91c-5135-46d9-9700-f7a583f2115d_text.gif)
-
-<iframe width="1071" height="636" src="https://www.youtube.com/embed/kQSakF5FVXM" title="" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+![DARN](https://i.ibb.co/27r9V5M3/image.png)
 
 [Video DEMO!](https://youtu.be/kQSakF5FVXM)
 
@@ -46,3 +41,7 @@ Fill in your shodan API key from the [shodan console](https://shodan.io).
 
 ## How to use?
 Open ```localhost:5173```
+
+AKA DARN IT!
+
+![DARN IT](https://y.yarn.co/1bd7d91c-5135-46d9-9700-f7a583f2115d_text.gif)
