@@ -255,7 +255,7 @@ def chat_relay(
     prompt: str,
     temperature: float = 0.7,
     max_tokens: int = 256,
-    timeout: float = 15.0,
+    timeout: float = 50.0,
 ) -> dict[str, object]:
     if not ip or not model or not prompt:
         raise HTTPException(status_code=400, detail="ip, model, and prompt are required")
